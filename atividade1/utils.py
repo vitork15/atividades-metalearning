@@ -80,18 +80,10 @@ def image_to_numpy(image):
     """
     Converte uma imagem PIL em um np.ndarray
     """
-    if hasattr(image, "convert"):
-        image = image.convert("RGB")
 
     image = np.asarray(image)
-
-    if image.ndim == 2:
-        image = image[..., None]
-
     image = image.astype(np.float32)
-
-    if image.max() > 1.0:
-        image /= 255.0
+    image = image/255.0
 
     return image
 
@@ -111,35 +103,34 @@ def get_dataset_metafeatures(dataset):
 
     channel_sum = np.zeros(channels)
     channel_sum_sq = np.zeros(channels)
+    
+    total_pixels = 0
 
     for image, _ in dataset:
 
         image = image_to_numpy(image)
 
         pixels = image.reshape(-1, channels)
+        
+        total_pixels += pixels.shape[0]
+        
         channel_sum += pixels.sum(axis=0)
         channel_sum_sq += np.sum(pixels ** 2, axis=0)
-
-    total_pixels = height * width * channels * n_samples
     
     mean = channel_sum / total_pixels
-    variance = (channel_sum_sq - mean)**2/total_pixels
+    variance = (channel_sum_sq/total_pixels) - mean**2 # E[X**2]-E[X]**2
     std = np.sqrt(variance)
 
     class_counts = np.bincount(labels)
     probabilities = class_counts[class_counts > 0] / n_samples
 
-    class_entropy = -np.sum(
-        probabilities * np.log2(probabilities)
-    )
+    class_entropy = -np.sum(probabilities * np.log2(probabilities))
 
     return {
         "num_samples": n_samples,
         "num_classes": n_classes,
 
-        "height": height,
-        "width": width,
-        "channels": channels,
+        "area": height*width,
 
         "pixel_mean": mean.tolist(),
         "pixel_std": std.tolist(),
@@ -156,9 +147,7 @@ def flatten_features(features):
 
     flat["num_samples"] = features["num_samples"]
     flat["num_classes"] = features["num_classes"]
-    flat["channels"] = features["channels"]
-    flat["height"] = features["height"]
-    flat["width"] = features["width"]
+    flat["area"] = features["area"]
 
     for i, channel in enumerate(["r", "g", "b"]):
         flat[f"pixel_mean_{channel}"] = features["pixel_mean"][i]
